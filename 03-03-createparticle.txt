@@ -1,0 +1,165 @@
+// src/utils/quantumEngine.ts
+
+import { Particle, GravityWell, QuantumState, LabConfig } from "../types/quantum.types";
+
+// ─── Constants ────────────────────────────────────────────────────
+const QUANTUM_COLORS: Record<QuantumState, string> = {
+  superposition: "#00f5ff",
+  entangled:     "#bf00ff",
+  collapsed:     "#ff6b35",
+  idle:          "#4a9eff",
+};
+
+const TWO_PI = Math.PI * 2;
+
+// ─── Particle Factory ─────────────────────────────────────────────
+export function createParticle(
+  id: string,
+  canvasWidth: number,
+  canvasHeight: number
+): Particle {
+  const state = randomQuantumState();
+  return {
+    id,
+    x:        Math.random() * canvasWidth,
+    y:        Math.random() * canvasHeight,
+    vx:       (Math.random() - 0.5) * 2,
+    vy:       (Math.random() - 0.5) * 2,
+    energy:   Math.random() * 100,
+    state,
+    color:    QUANTUM_COLORS[state],
+    radius:   Math.random() * 3 + 1,
+    lifetime: Math.random() * 300 + 100,
+    age:      0,
+  };
+}
+
+// ─── State Helpers ────────────────────────────────────────────────
+function randomQuantumState(): QuantumState {
+  const states: QuantumState[] = ["superposition", "entangled", "collapsed", "idle"];
+  return states[Math.floor(Math.random() * states.length)];
+}
+
+// ─── Physics Update ───────────────────────────────────────────────
+export function updateParticle(
+  particle: Particle,
+  config:   LabConfig,
+  delta:    number
+): Particle | null {
+  const p = { ...particle };
+
+  // Age tracking — remove expired particles
+  p.age += delta;
+  if (p.age >= p.lifetime) return null;
+
+  // Apply gravity wells
+  for (const well of config.gravityWells) {
+    const dx       = well.x - p.x;
+    const dy       = well.y - p.y;
+    const distSq   = dx * dx + dy * dy;
+    const dist     = Math.sqrt(distSq);
+
+    if (dist < well.radius && dist > 0) {
+      const force = (well.strength / distSq) * delta;
+      p.vx += (dx / dist) * force;
+      p.vy += (dy / dist) * force;
+    }
+  }
+
+  // Apply velocity with simulation speed
+  p.x += p.vx * config.simulationSpeed * delta;
+  p.y += p.vy * config.simulationSpeed * delta;
+
+  // Energy decay over time
+  p.energy = Math.max(0, p.energy - config.energyDecay * delta);
+
+  // Quantum state transitions based on energy
+  p.state = resolveQuantumState(p.energy);
+  p.color = QUANTUM_COLORS[p.state];
+
+  // Boundary reflection (toroidal wrapping)
+  // Using wrapping instead of bounce for smoother visuals
+  p.x = wrapValue(p.x, 0, 1920);
+  p.y = wrapValue(p.y, 0, 1080);
+
+  return p;
+}
+
+// ─── State Resolution ─────────────────────────────────────────────
+function resolveQuantumState(energy: number): QuantumState {
+  if (energy > 75) return "superposition";
+  if (energy > 50) return "entangled";
+  if (energy > 25) return "collapsed";
+  return "idle";
+}
+
+// ─── Utility ─────────────────────────────────────────────────────
+function wrapValue(value: number, min: number, max: number): number {
+  const range = max - min;
+  return ((value - min) % range + range) % range + min;
+}
+
+// ─── Canvas Renderer ──────────────────────────────────────────────
+export function renderParticle(
+  ctx:      CanvasRenderingContext2D,
+  particle: Particle
+): void {
+  const alpha = 1 - particle.age / particle.lifetime;
+
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, alpha);
+
+  // Glow effect
+  ctx.shadowBlur  = 15;
+  ctx.shadowColor = particle.color;
+
+  // Core particle
+  ctx.beginPath();
+  ctx.arc(particle.x, particle.y, particle.radius, 0, TWO_PI);
+  ctx.fillStyle = particle.color;
+  ctx.fill();
+
+  // Energy ring for high-energy particles
+  if (particle.energy > 70) {
+    ctx.beginPath();
+    ctx.arc(particle.x, particle.y, particle.radius * 2.5, 0, TWO_PI);
+    ctx.strokeStyle = particle.color;
+    ctx.lineWidth   = 0.5;
+    ctx.globalAlpha = alpha * 0.3;
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+// ─── Entanglement Renderer ────────────────────────────────────────
+export function renderEntanglementLink(
+  ctx: CanvasRenderingContext2D,
+  p1:  Particle,
+  p2:  Particle
+): void {
+  if (p1.state !== "entangled" || p2.state !== "entangled") return;
+
+  const dx   = p2.x - p1.x;
+  const dy   = p2.y - p1.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
+  // Only draw links within proximity
+  if (dist > 150) return;
+
+  const alpha = (1 - dist / 150) * 0.4;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = "#bf00ff";
+  ctx.lineWidth   = 0.5;
+  ctx.shadowBlur  = 8;
+  ctx.shadowColor = "#bf00ff";
+
+  ctx.beginPath();
+  ctx.moveTo(p1.x, p1.y);
+  ctx.lineTo(p2.x, p2.y);
+  ctx.stroke();
+
+  ctx.restore();
+}

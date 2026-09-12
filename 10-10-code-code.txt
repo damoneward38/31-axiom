@@ -1,0 +1,6 @@
+your-axiom-folder/
+├── main.js          ← paste this in
+├── package.json     ← paste this in
+├── browser.js       ← paste this in
+└── axiom/
+    └── index.html   ← your existing AXIOM

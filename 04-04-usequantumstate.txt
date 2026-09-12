@@ -1,0 +1,163 @@
+// src/hooks/useQuantumState.ts
+
+import { useState, useEffect, useCallback, useRef } from "react";
+import {
+  Particle,
+  QuantumMetrics,
+  LabConfig,
+  GravityWell,
+  QuantumExperiment,
+} from "../types/quantum.types";
+import { createParticle, updateParticle } from "../utils/quantumEngine";
+
+// ─── Default Config ───────────────────────────────────────────────
+const DEFAULT_CONFIG: LabConfig = {
+  maxParticles:     200,
+  simulationSpeed:  1,
+  energyDecay:      0.05,
+  collisionEnabled: false,
+  gravityWells:     [],
+};
+
+// ─── Hook ─────────────────────────────────────────────────────────
+export function useQuantumState(canvasWidth: number, canvasHeight: number) {
+  const [particles,   setParticles]   = useState<Particle[]>([]);
+  const [metrics,     setMetrics]     = useState<QuantumMetrics>({
+    fps: 0, activeParticles: 0, totalEnergy: 0,
+    entanglementPairs: 0, collapseEvents: 0,
+  });
+  const [config,      setConfig]      = useState<LabConfig>(DEFAULT_CONFIG);
+  const [experiments, setExperiments] = useState<QuantumExperiment[]>([]);
+  const [isRunning,   setIsRunning]   = useState(true);
+
+  // Refs for animation loop (avoid stale closures)
+  const particlesRef  = useRef<Particle[]>([]);
+  const configRef     = useRef<LabConfig>(DEFAULT_CONFIG);
+  const isRunningRef  = useRef(true);
+  const lastTimeRef   = useRef<number>(0);
+  const fpsCounterRef = useRef<number[]>([]);
+  const particleIdRef = useRef(0);
+  const animFrameRef  = useRef<number>(0);
+
+  // Keep refs in sync
+  useEffect(() => { configRef.current  = config;    }, [config]);
+  useEffect(() => { isRunningRef.current = isRunning; }, [isRunning]);
+
+  // ─── Spawn Particle ─────────────────────────────────────────────
+  const spawnParticle = useCallback(() => {
+    const id = `q-${++particleIdRef.current}`;
+    return createParticle(id, canvasWidth, canvasHeight);
+  }, [canvasWidth, canvasHeight]);
+
+  // ─── Add Gravity Well ───────────────────────────────────────────
+  const addGravityWell = useCallback((x: number, y: number) => {
+    const well: GravityWell = {
+      id:       `gw-${Date.now()}`,
+      x, y,
+      strength: 5000,
+      radius:   200,
+    };
+    setConfig(prev => ({
+      ...prev,
+      gravityWells: [...prev.gravityWells, well],
+    }));
+  }, []);
+
+  // ─── Remove Gravity Well ────────────────────────────────────────
+  const removeGravityWell = useCallback((id: string) => {
+    setConfig(prev => ({
+      ...prev,
+      gravityWells: prev.gravityWells.filter(w => w.id !== id),
+    }));
+  }, []);
+
+  // ─── Create Experiment ──────────────────────────────────────────
+  const createExperiment = useCallback((name: string, description: string) => {
+    const experiment: QuantumExperiment = {
+      id:            `exp-${Date.now()}`,
+      name,
+      description,
+      status:        "running",
+      progress:      0,
+      particleCount: particlesRef.current.length,
+      energyLevel:   particlesRef.current.reduce((s, p) => s + p.energy, 0),
+      createdAt:     new Date(),
+      tags:          [],
+    };
+    setExperiments(prev => [experiment, ...prev.slice(0, 9)]); // keep last 10
+    return experiment.id;
+  }, []);
+
+  // ─── Main Animation Loop ────────────────────────────────────────
+  useEffect(() => {
+    const animate = (timestamp: number) => {
+      if (!isRunningRef.current) {
+        animFrameRef.current = requestAnimationFrame(animate);
+        return;
+      }
+
+      const delta = Math.min((timestamp - lastTimeRef.current) / 16.67, 3); // cap at 3x
+      lastTimeRef.current = timestamp;
+
+      const cfg = configRef.current;
+
+      // FPS calculation (rolling average over 60 frames)
+      fpsCounterRef.current.push(1000 / Math.max(timestamp - lastTimeRef.current + 0.001, 1));
+      if (fpsCounterRef.current.length > 60) fpsCounterRef.current.shift();
+      const fps = Math.round(
+        fpsCounterRef.current.reduce((a, b) => a + b, 0) / fpsCounterRef.current.length
+      );
+
+      // Update particles
+      let updated = particlesRef.current
+        .map(p => updateParticle(p, cfg, delta))
+        .filter((p): p is Particle => p !== null);
+
+      // Spawn new particles to maintain max count
+      while (updated.length < cfg.maxParticles) {
+        updated.push(spawnParticle());
+      }
+
+      particlesRef.current = updated;
+
+      // Compute metrics
+      const totalEnergy      = updated.reduce((s, p) => s + p.energy, 0);
+      const entangledCount   = updated.filter(p => p.state === "entangled").length;
+      const collapsedCount   = updated.filter(p => p.state === "collapsed").length;
+
+      setParticles([...updated]);
+      setMetrics({
+        fps,
+        activeParticles:   updated.length,
+        totalEnergy:       Math.round(totalEnergy),
+        entanglementPairs: Math.floor(entangledCount / 2),
+        collapseEvents:    collapsedCount,
+      });
+
+      animFrameRef.current = requestAnimationFrame(animate);
+    };
+
+    animFrameRef.current = requestAnimationFrame(animate);
+
+    // Initialize particles
+    particlesRef.current = Array.from(
+      { length: DEFAULT_CONFIG.maxParticles },
+      () => spawnParticle()
+    );
+
+    return () => cancelAnimationFrame(animFrameRef.current);
+  }, [spawnParticle]);
+
+  return {
+    particles,
+    metrics,
+    config,
+    experiments,
+    isRunning,
+    setConfig,
+    setIsRunning,
+    addGravityWell,
+    removeGravityWell,
+    createExperiment,
+  };
+}

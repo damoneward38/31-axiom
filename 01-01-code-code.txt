@@ -1,0 +1,17 @@
+quantum-lab/
+├── src/
+│   ├── components/
+│   │   ├── QuantumCore.tsx
+│   │   ├── ParticleField.tsx
+│   │   └── Dashboard.tsx
+│   ├── hooks/
+│   │   └── useQuantumState.ts
+│   ├── utils/
+│   │   └── quantumEngine.ts
+│   ├── types/
+│   │   └── quantum.types.ts
+│   └── styles/
+│       └── quantum.css
+├── server/
+│   └── index.ts
+└── package.json

@@ -1,0 +1,297 @@
+// src/components/Dashboard.tsx
+
+import React, { useState, useCallback } from "react";
+import { ParticleField } from "./ParticleField";
+import { useQuantumState } from "../hooks/useQuantumState";
+import { QuantumMetrics, LabConfig } from "../types/quantum.types";
+
+const CANVAS_WIDTH  = 1200;
+const CANVAS_HEIGHT = 700;
+
+// ─── Metric Card ──────────────────────────────────────────────────
+const MetricCard: React.FC<{
+  label: string;
+  value: string | number;
+  color: string;
+  unit?: string;
+}> = ({ label, value, color, unit }) => (
+  <div className="metric-card" style={{ borderColor: color }}>
+    <span className="metric-label">{label}</span>
+    <span className="metric-value" style={{ color }}>
+      {value}
+      {unit && <span className="metric-unit">{unit}</span>}
+    </span>
+  </div>
+);
+
+// ─── Control Slider ───────────────────────────────────────────────
+const ControlSlider: React.FC<{
+  label:    string;
+  value:    number;
+  min:      number;
+  max:      number;
+  step:     number;
+  onChange: (value: number) => void;
+}> = ({ label, value, min, max, step, onChange }) => (
+  <div className="control-slider">
+    <div className="control-header">
+      <span className="control-label">{label}</span>
+      <span className="control-value">{value.toFixed(2)}</span>
+    </div>
+    <input
+      type    ="range"
+      min     ={min}
+      max     ={max}
+      step    ={step}
+      value   ={value}
+      onChange={e => onChange(parseFloat(e.target.value))}
+      className="slider"
+    />
+  </div>
+);
+
+// ─── Dashboard ────────────────────────────────────────────────────
+export const Dashboard: React.FC = () => {
+  const {
+    particles, metrics, config, experiments,
+    isRunning, setConfig, setIsRunning,
+    addGravityWell, removeGravityWell, createExperiment,
+  } = useQuantumState(CANVAS_WIDTH, CANVAS_HEIGHT);
+
+  const [activeTab,    setActiveTab]    = useState<"metrics" | "controls" | "experiments">("metrics");
+  const [expName,      setExpName]      = useState("");
+  const [expDesc,      setExpDesc]      = useState("");
+  const [notification, setNotification] = useState<string | null>(null);
+
+  // ─── Notify Helper ──────────────────────────────────────────
+  const notify = useCallback((msg: string) => {
+    setNotification(msg);
+    setTimeout(() => setNotification(null), 3000);
+  }, []);
+
+  // ─── Canvas Click → Gravity Well ────────────────────────────
+  const handleCanvasClick = useCallback(
+    (x: number, y: number) => {
+      addGravityWell(x, y);
+      notify(`⚛ Gravity well added at (${Math.round(x)}, ${Math.round(y)})`);
+    },
+    [addGravityWell, notify]
+  );
+
+  // ─── Config Updater ─────────────────────────────────────────
+  const updateConfig = useCallback(
+    <K extends keyof LabConfig>(key: K, value: LabConfig[K]) => {
+      setConfig(prev => ({ ...prev, [key]: value }));
+    },
+    [setConfig]
+  );
+
+  // ─── Submit Experiment ──────────────────────────────────────
+  const handleCreateExperiment = useCallback(() => {
+    if (!expName.trim()) return;
+    const id = createExperiment(expName.trim(), expDesc.trim());
+    setExpName("");
+    setExpDesc("");
+    notify(`🧪 Experiment "${expName}" created — ID: ${id}`);
+  }, [expName, expDesc, createExperiment, notify]);
+
+  return (
+    <div className="dashboard">
+      {/* ── Header ─────────────────────────────────────────── */}
+      <header className="lab-header">
+        <div className="logo">
+          <span className="logo-symbol">⬡</span>
+          <span className="logo-text">QUANTUM<span className="logo-accent">.lab</span></span>
+        </div>
+
+        <div className="header-status">
+          <span className={`status-dot ${isRunning ? "running" : "paused"}`} />
+          <span className="status-text">{isRunning ? "SIMULATION ACTIVE" : "PAUSED"}</span>
+        </div>
+
+        <button
+          className={`btn-primary ${isRunning ? "btn-pause" : "btn-play"}`}
+          onClick={() => setIsRunning(r => !r)}
+        >
+          {isRunning ? "⏸ Pause" : "▶ Resume"}
+        </button>
+      </header>
+
+      {/* ── Notification ───────────────────────────────────── */}
+      {notification && (
+        <div className="notification">{notification}</div>
+      )}
+
+      {/* ── Main Layout ────────────────────────────────────── */}
+      <div className="main-layout">
+
+        {/* Canvas */}
+        <div className="canvas-wrapper">
+          <ParticleField
+            particles    ={particles}
+            gravityWells ={config.gravityWells}
+            onCanvasClick={handleCanvasClick}
+            width        ={CANVAS_WIDTH}
+            height       ={CANVAS_HEIGHT}
+          />
+          <p className="canvas-hint">
+            Click anywhere on the field to spawn a gravity well
+          </p>
+        </div>
+
+        {/* Side Panel */}
+        <aside className="side-panel">
+
+          {/* Tabs */}
+          <div className="tabs">
+            {(["metrics", "controls", "experiments"] as const).map(tab => (
+              <button
+                key       ={tab}
+                className ={`tab ${activeTab === tab ? "tab-active" : ""}`}
+                onClick   ={() => setActiveTab(tab)}
+              >
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          {/* ── Metrics Tab ──────────────────────────────── */}
+          {activeTab === "metrics" && (
+            <div className="tab-content">
+              <MetricCard label="FPS"               value={metrics.fps}                color="#00f5ff" />
+              <MetricCard label="Active Particles"  value={metrics.activeParticles}    color="#4a9eff" />
+              <MetricCard label="Total Energy"      value={metrics.totalEnergy}        color="#ff6b35" unit=" eV" />
+              <MetricCard label="Entangled Pairs"   value={metrics.entanglementPairs}  color="#bf00ff" />
+              <MetricCard label="Collapse Events"   value={metrics.collapseEvents}     color="#ff4444" />
+              <MetricCard label="Gravity Wells"     value={config.gravityWells.length} color="#00ff88" />
+
+              {/* Gravity Well Controls */}
+              {config.gravityWells.length > 0 && (
+                <div className="well-list">
+                  <h3 className="section-title">Active Wells</h3>
+                  {config.gravityWells.map(well => (
+                    <div key={well.id} className="well-item">
+                      <span>({Math.round(well.x)}, {Math.round(well.y)})</span>
+                      <button
+                        className="btn-remove"
+                        onClick={() => removeGravityWell(well.id)}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Controls Tab ─────────────────────────────── */}
+          {activeTab === "controls" && (
+            <div className="tab-content">
+              <ControlSlider
+                label   ="Max Particles"
+                value   ={config.maxParticles}
+                min     ={10}
+                max     ={500}
+                step    ={10}
+                onChange={v => updateConfig("maxParticles", v)}
+              />
+              <ControlSlider
+                label   ="Simulation Speed"
+                value   ={config.simulationSpeed}
+                min     ={0.1}
+                max     ={5}
+                step    ={0.1}
+                onChange={v => updateConfig("simulationSpeed", v)}
+              />
+              <ControlSlider
+                label   ="Energy Decay"
+                value   ={config.energyDecay}
+                min     ={0}
+                max     ={0.5}
+                step    ={0.01}
+                onChange={v => updateConfig("energyDecay", v)}
+              />
+
+              <div className="control-toggle">
+                <span className="control-label">Collision Detection</span>
+                <button
+                  className={`toggle ${config.collisionEnabled ? "toggle-on" : "toggle-off"}`}
+                  onClick={() => updateConfig("collisionEnabled", !config.collisionEnabled)}
+                >
+                  {config.collisionEnabled ? "ON" : "OFF"}
+                </button>
+              </div>
+
+              <button
+                className="btn-danger full-width"
+                onClick={() => {
+                  config.gravityWells.forEach(w => removeGravityWell(w.id));
+                  notify("All gravity wells cleared");
+                }}
+              >
+                Clear All Wells
+              </button>
+            </div>
+          )}
+
+          {/* ── Experiments Tab ──────────────────────────── */}
+          {activeTab === "experiments" && (
+            <div className="tab-content">
+              <div className="experiment-form">
+                <input
+                  className  ="input-field"
+                  placeholder="Experiment name..."
+                  value      ={expName}
+                  onChange   ={e => setExpName(e.target.value)}
+                  maxLength  ={50}
+                />
+                <textarea
+                  className  ="input-field textarea"
+                  placeholder="Description (optional)..."
+                  value      ={expDesc}
+                  onChange   ={e => setExpDesc(e.target.value)}
+                  maxLength  ={200}
+                  rows       ={3}
+                />
+                <button
+                  className="btn-primary full-width"
+                  onClick  ={handleCreateExperiment}
+                  disabled ={!expName.trim()}
+                >
+                  + Create Snapshot
+                </button>
+              </div>
+
+              {/* Experiment Log */}
+              <div className="experiment-log">
+                {experiments.length === 0 ? (
+                  <p className="empty-state">No experiments yet.</p>
+                ) : (
+                  experiments.map(exp => (
+                    <div key={exp.id} className="experiment-card">
+                      <div className="exp-header">
+                        <span className="exp-name">{exp.name}</span>
+                        <span className={`exp-status exp-${exp.status}`}>
+                          {exp.status}
+                        </span>
+                      </div>
+                      {exp.description && (
+                        <p className="exp-desc">{exp.description}</p>
+                      )}
+                      <div className="exp-meta">
+                        <span>⚛ {exp.particleCount} particles</span>
+                        <span>⚡ {Math.round(exp.energyLevel)} eV</span>
+                        <span>{exp.createdAt.toLocaleTimeString()}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </aside>
+      </div>
+    </div>
+  );
+};
