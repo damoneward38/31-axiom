@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<link rel="icon" href="data:,">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QUANTUM.lab — Particle Simulation</title>
@@ -91,6 +92,7 @@ body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono','Fira C
     </div>
     <button class="btn-primary" id="pauseBtn" onclick="toggleSim()">⏸ Pause</button>
   </header>
+<div role="note" style="margin:8px 14px;padding:10px 14px;background:#211d30;color:#e9d5ff;border:1px solid #4c3c75;border-radius:8px;font-size:12px">SIMULATION ONLY: the canvas visualizes a toy particle/gravity model; it is not a physical quantum simulation or scientific measurement.</div>
   <div class="main-layout">
     <div class="canvas-wrapper">
       <canvas class="quantum-canvas" id="canvas" onclick="addGravityWell(event)"></canvas>
